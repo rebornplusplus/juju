@@ -1,0 +1,115 @@
+name: jujud-operator
+version: 'v3.6'
+summary: Juju agent for running a Juju controller and managing the operation of charms.
+description: |
+  This is a rock of the jujud-operator image. jujud-operator is a Juju agent
+  for running a Juju controller and managing the operation of charms.
+license: AGPL-3.0
+
+base: ubuntu@24.04
+
+platforms:
+  amd64:
+
+environment:
+  WHEELHOUSE: /tmp/wheelhouse
+  PIP_WHEEL_DIR: /tmp/wheelhouse
+  PIP_FIND_LINKS: /tmp/wheelhouse
+
+parts:
+  users:
+    plugin: nil
+    override-build: |
+      # Add the syslog user for audit logging.
+      useradd --system --no-create-home --shell /usr/sbin/nologin syslog
+      # Add the juju and sjuju user for rootless agents.
+      # 170 and 171 uid/gid must be updated here and in caas/kubernetes/provider/constants/constants.go
+      groupadd --gid 170 juju
+      useradd --uid 170 --gid 170 --no-create-home --shell /usr/bin/bash juju
+      groupadd --gid 171 sjuju
+      useradd --uid 171 --gid 171 --no-create-home --shell /usr/bin/bash sjuju
+      mkdir -p /etc/sudoers.d && echo "sjuju ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/sjuju
+      # Copy the /etc/passwd and /etc/group files. There might be better
+      # approaches than the following.
+      mkdir ${CRAFT_PART_INSTALL}/etc
+      cp /etc/passwd ${CRAFT_PART_INSTALL}/etc/passwd
+      cp /etc/group ${CRAFT_PART_INSTALL}/etc/group
+      cp -r /etc/sudoers.d ${CRAFT_PART_INSTALL}/etc/sudoers.d
+
+  # Python requirements.txt file.
+  python-req:
+    plugin: dump
+    source: .
+    source-type: local
+    organize:
+      docker-staging/requirements.txt: tmp/wheelhouse/requirements.txt
+    stage:
+      - tmp/wheelhouse/requirements.txt
+
+  # Python and python packages.
+  python:
+    plugin: nil
+    after:
+      - python-req
+      - additional-pkgs
+    stage-packages:
+      # - sudo
+      - base-files_base
+      - ca-certificates_data
+      - openssl_config
+      - python3.12_standard
+    override-prime: |
+      craftctl default
+      # Install python3 symlink.
+      ln -s /usr/bin/python3.12 ${CRAFT_PRIME}/usr/bin/python3
+      # Download additional packages.
+      #
+      # We are manually downloading and extracting them because we cannot mix
+      # slices and packages in 'stage-packages' and the following packages have
+      # not been sliced yet.
+      apt-get download python3-wheel python3-setuptools python3-pip iproute2
+      for f in *.deb; do dpkg -x "$f" ${CRAFT_PRIME} ; done
+      rm *.deb
+      # Install additional python packages using pip.
+      echo "nameserver 8.8.8.8" >> ${CRAFT_PRIME}/etc/resolv.conf
+      chroot ${CRAFT_PRIME} pip install --upgrade --ignore-installed pip setuptools pyyaml
+      chroot ${CRAFT_PRIME} pip install -r /tmp/wheelhouse/requirements.txt
+      rm -rf ${CRAFT_PRIME}/root/.cache
+
+  # (Whole) packages, some are dependencies of other packages not installed in
+  # this part.
+  additional-pkgs:
+    plugin: nil
+    stage-packages:
+      # The following packages are needed for debug hooks. Additionally, they
+      # depend on python3.12 and they are not chiselled. So they are left out.
+      # - tmux
+      # - byobu
+      - curl
+      - dash
+      # The following are dependencies of iproute2.
+      - libbpf1
+      - libc6
+      - libcap2
+      - libdb5.3t64
+      - libelf1t64
+      - libmnl0
+      - libselinux1
+      - libtirpc3t64
+      - libxtables12
+      - libcap2-bin
+
+  # Juju agents (containeragent, jujuc, jujud, pebble).
+  juju-agents:
+    plugin: dump
+    source: .
+    source-type: local
+    organize:
+      # The "linux_amd64" bit should be replaced with environment variables e.g.
+      # ${TARGETOS}_${TARGETARCH}.
+      linux_amd64/bin/jujud: opt/jujud
+      linux_amd64/bin/jujuc: opt/jujuc
+      linux_amd64/bin/containeragent: opt/containeragent
+      linux_amd64/bin/pebble: opt/pebble
+    stage:
+      - opt/*
