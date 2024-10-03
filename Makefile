@@ -74,7 +74,7 @@ OCI_IMAGE_PLATFORMS ?= linux/$(GOARCH)
 # Build tags passed to go install/build.
 # Passing no-dqlite will disable building with dqlite.
 # Example: BUILD_TAGS="minimal provider_kubernetes"
-BUILD_TAGS ?= 
+BUILD_TAGS ?=
 
 # EXTRA_BUILD_TAGS is not passed in, but built up from context.
 EXTRA_BUILD_TAGS =
@@ -566,7 +566,7 @@ check-deps:
 
 
 # CAAS related targets
-export OCI_BUILDER         ?= $(shell (which podman 2>&1 > /dev/null && echo podman) || echo docker )
+export OCI_BUILDER         ?= $(shell (which rockcraft 2>&1 > /dev/null && echo rockcraft) || echo docker )
 DOCKER_USERNAME            ?= docker.io/jujusolutions
 DOCKER_BUILDX_CONTEXT      ?= juju-make
 DOCKER_STAGING_DIR         ?= ${BUILD_DIR}/docker-staging
