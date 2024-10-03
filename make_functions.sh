@@ -16,7 +16,7 @@ OCI_BUILDER=${OCI_BUILDER:-docker}
 DOCKER_USERNAME=${DOCKER_USERNAME:-docker.io/jujusolutions}
 DOCKER_BUILDX_CONTEXT=${DOCKER_BUILDX_CONTEXT:-juju-make}
 DOCKER_STAGING_DIR="${BUILD_DIR}/docker-staging"
-DOCKER_BIN=${DOCKER_BIN:-$(which ${OCI_BUILDER} || true)}
+DOCKER_BIN=${DOCKER_BIN:-$(which $(sed 's/rockcraft/docker/g' <(echo ${OCI_BUILDER})) || true)}
 
 readonly docker_staging_dir="docker-staging"
 
@@ -146,8 +146,16 @@ build_push_operator_image() {
         if [[ "$push_image" = true ]]; then
             "$DOCKER_BIN" manifest push -f v2s2 "$(operator_image_path)" "docker://$(operator_image_path)"
         fi
+    elif [[ "${OCI_BUILDER}" = "rockcraft" ]]; then
+        cp "${PROJECT_DIR}/caas/rockcraft.yaml" "${BUILD_DIR}/"
+        cd "${BUILD_DIR}" && rockcraft pack -v && cd -
+        rock_file="$(ls "${BUILD_DIR}" | grep "^jujud-operator_.*\.rock$")"
+        mv "${BUILD_DIR}/$rock_file" "${BUILD_DIR}/oci.tar.gz"
+        rockcraft.skopeo copy --insecure-policy \
+            oci-archive:"${BUILD_DIR}/oci.tar.gz" \
+            "docker-daemon:$(operator_image_path)"
     else
-        echo "unknown OCI_BUILDER=${OCI_BUILDER} expected docker or podman"
+        echo "unknown OCI_BUILDER=${OCI_BUILDER} expected docker, podman or rockcraft"
         exit 1
     fi
 }
@@ -166,7 +174,7 @@ seed_repository() {
     else
       break
     fi
-  done	
+  done
 }
 
 wait_for_dpkg() {

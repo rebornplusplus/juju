@@ -13,7 +13,7 @@ jobs:
 
   smoke:
     name: Smoke
-    runs-on: [self-hosted, linux, arm64, aws, quad-xlarge]
+    runs-on: ubuntu-latest
     if: github.event.pull_request.draft == false
     strategy:
       fail-fast: false
@@ -57,6 +57,10 @@ jobs:
         channel: "1.30-strict/stable"
         addons: '["dns", "hostpath-storage", "rbac"]'
         launch-configuration: "$GITHUB_WORKSPACE/.github/microk8s-launch-config-aws.yaml"
+
+    - name: Setup rockcraft
+      run: |
+        sudo snap install rockcraft --classic
 
     - name: Set up Go
       uses: actions/setup-go@v5
